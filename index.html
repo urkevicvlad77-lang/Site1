@@ -1,0 +1,498 @@
+ChatGPT | Nano Banana | Seedance:
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>СпорМаршрут — демо</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: #19212b;
+      background: #f4f6f8;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px max(20px, calc((100% - 1100px) / 2));
+      background: #172b4d;
+      color: white;
+    }
+
+    header h1 { margin: 0; font-size: 22px; }
+
+    main {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    section, .card {
+      background: white;
+      border: 1px solid #e2e7ec;
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    h2 { margin: 0 0 14px; font-size: 20px; }
+
+    label {
+      display: block;
+      margin: 12px 0 5px;
+      font-weight: 600;
+    }
+
+    input, select, button {
+      font: inherit;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cbd3dc;
+      border-radius: 8px;
+      background: white;
+    }
+
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: #246bfd;
+      color: white;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    button:hover { filter: brightness(.95); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    button.secondary {
+      background: #e9eef5;
+      color: #19212b;
+    }
+
+    button.danger { background: #c93636; }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .row > * { flex: 1; }
+
+    #map {
+      height: 320px;
+      margin: 12px 0;
+      border-radius: 10px;
+      border: 1px solid #dce2e9;
+    }
+
+    .hint, .muted { color: #647184; font-size: 14px; }
+    .wallet { white-space: nowrap; }
+    .offers { display: grid; gap: 12px; }
+
+    .card h3 { margin: 0 0 6px; font-size: 17px; }
+    .card p { margin: 5px 0; }
+    .card .row { margin-top: 12px; }
+
+    .status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: #edf2f7;
+      font-size: 13px;
+    }
+
+    #activeBox {
+      display: none;
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 10px;
+      background: #eef5ff;
+    }
+
+    .notice {
+      grid-column: 1 / -1;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: #fff5d8;
+      color: #594616;
+      font-size: 14px;
+    }
+
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .wallet { white-space: normal; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>СпорМаршрут</h1>
+    <div class="wallet">
+      Игрок: <strong id="playerLabel"></strong> ·
+      Баланс: <strong id="balanceLabel"></strong> демо-кредитов
+    </div>
+  </header>
+
+  <main>
+    <div class="notice">
+      Демо-версия: ставки и баланс виртуальные, данные хранятся только в этом браузере.
+      Для реальных денежных операций понадобятся сервер, защита от подмены GPS и проверка
+      юридических требований.
+    </div>
+
+    <section>
+      <h2>Создать предложение</h2>
+
+      <label for="playerName">Ваше имя в демо</label>
+      <input id="playerName" maxlength="30" placeholder="Например, Алекс">
+
+      <div class="row">
+        <div>
+          <label for="stake">Ставка</label>
+          <input id="stake" type="number" min="1" value="100">
+        </div>
+        <div>
+          <label for="arrivalMinutes">Время до точки А, минут</label>
+          <input id="arrivalMinutes" type="number" min="1" value="30">
+        </div>
+
+      <label for="routeMinutes">Время от точки А до точки Б, минут</label>
+
+      <input id="routeMinutes" type="number" min="1" value="20">
+
+      <label>Точки маршрута</label>
+      <div class="row">
+        <button id="pickA" class="secondary" type="button">Выбрать точку А</button>
+        <button id="pickB" class="secondary" type="button">Выбрать точку Б</button>
+      </div>
+      <p id="pointsHint" class="hint">Нажмите на карту, чтобы отметить точку А.</p>
+      <div id="map"></div>
+
+      <button id="createBtn" type="button">Опубликовать спор</button>
+    </section>
+
+    <section>
+      <h2>Лента предложений</h2>
+      <div id="offers" class="offers"></div>
+
+      <div id="activeBox">
+        <strong id="activeTitle">Активный спор</strong>
+        <p id="activeStatus"></p>
+        <p id="activeTimer" class="muted"></p>
+        <button id="stopGps" class="secondary" type="button">Остановить GPS</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const STORAGE_KEY = "route-bets-demo-v1";
+    const defaultState = { balances: {}, offers: [] };
+
+    let state;
+    try {
+      state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultState;
+    } catch {
+      state = defaultState;
+    }
+
+    let pointA = null;
+    let pointB = null;
+    let picking = "A";
+    let activeOfferId = null;
+    let watchId = null;
+
+    const $ = id => document.getElementById(id);
+    const map = L.map("map").setView([55.751244, 37.618423], 11);
+    const markers = L.layerGroup().addTo(map);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function playerName() {
+      return $("playerName").value.trim() || "Гость";
+    }
+
+    function balance(name = playerName()) {
+      if (state.balances[name] == null) state.balances[name] = 1000;
+      return state.balances[name];
+    }
+
+    function updateWallet() {
+      $("playerLabel").textContent = playerName();
+      $("balanceLabel").textContent = balance().toLocaleString("ru-RU");
+      save();
+    }
+
+    function esc(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[char]);
+    }
+
+    function drawPoints() {
+      markers.clearLayers();
+
+      if (pointA) {
+        L.marker([pointA.lat, pointA.lng]).addTo(markers).bindPopup("Точка А");
+      }
+      if (pointB) {
+        L.marker([pointB.lat, pointB.lng]).addTo(markers).bindPopup("Точка Б");
+      }
+
+      state.offers.forEach(offer => {
+        if (offer.status !== "open") return;
+        L.circleMarker([offer.a.lat, offer.a.lng], { radius: 6, color: "#16834b" })
+          .addTo(markers).bindPopup("Точка А · " + esc(offer.title));
+        L.circleMarker([offer.b.lat, offer.b.lng], { radius: 6, color: "#246bfd" })
+          .addTo(markers).bindPopup("Точка Б · " + esc(offer.title));
+      });
+    }
+
+    map.on("click", event => {
+      const point = { lat: event.latlng.lat, lng: event.latlng.lng };
+      if (picking === "A") pointA = point;
+      else pointB = point;
+
+      $("pointsHint").textContent =
+        `Точка А: ${pointA ? "выбрана" : "не выбрана"} · ` +
+        `Точка Б: ${pointB ? "выбрана" : "не выбрана"}`;
+
+      drawPoints();
+    });
+
+    $("pickA").onclick = () => { picking = "A"; $("pointsHint").textContent = "Нажмите на карту, чтобы отметить точку А."; };
+    $("pickB").onclick = () => { picking = "B"; $("pointsHint").textContent = "Нажмите на карту, чтобы отметить точку Б."; };
+    $("playerName").addEventListener("input", updateWallet);
+
+    $("createBtn").onclick = () => {
+      const name = playerName();
+      const stake = Number($("stake").value);
+      const routeMinutes = Number($("routeMinutes").value);
+
+      if (!pointA || !pointB) return alert("Сначала выберите точки А и Б на карте.");
+
+      if (![stake, arrivalMinutes, routeMinutes].every(n => Number.isFinite(n) && n > 0)) {
+        return alert("Ставка и время должны быть больше нуля.");
+      }
+      if (balance(name) < stake) return alert("Недостаточно демо-кредитов.");
+
+      // Ставка автора резервируется до завершения спора.
+      state.balances[name] -= stake;
+      state.offers.unshift({
+        id: crypto.randomUUID(),
+        title: `${name}: маршрут А → Б`,
+        creator: name,
+        stake,
+        arrivalMinutes,
+        routeMinutes,
+        a: pointA,
+        b: pointB,
+        status: "open",
+        createdAt: Date.now()
+      });
+
+      save();
+      render();
+      updateWallet();
+    };
+
+    function render() {
+      const container = $("offers");
+      const openOffers = state.offers.filter(offer => offer.status === "open");
+
+      container.innerHTML = openOffers.length
+        ? openOffers.map(offer => `
+          <article class="card">
+            <h3>${esc(offer.title)}</h3>
+            <p>Ставка: <strong>${offer.stake}</strong> демо-кредитов</p>
+            <p>Добраться до А за ${offer.arrivalMinutes} мин. · А → Б за ${offer.routeMinutes} мин.</p>
+            <p class="muted">Автор резервирует такую же сумму. При успехе участник получает обе ставки.</p>
+            <div class="row">
+              <button type="button" onclick="acceptOffer('${offer.id}')">Принять</button>
+              <button class="secondary" type="button" onclick="showOffer('${offer.id}')">Показать точки</button>
+              ${offer.creator === playerName()
+                ? `<button class="danger" type="button" onclick="cancelOffer('${offer.id}')">Отменить</button>`
+                : ""}
+            </div>
+          </article>
+        `).join("")
+        : `<p class="muted">Пока нет открытых предложений.</p>`;
+
+      const active = state.offers.find(o => o.id === activeOfferId && o.status === "active");
+      $("activeBox").style.display = active ? "block" : "none";
+      if (active) updateActiveText(active);
+      drawPoints();
+      updateWallet();
+    }
+
+    window.showOffer = id => {
+      const offer = state.offers.find(o => o.id === id);
+      if (!offer) return;
+      map.fitBounds([[offer.a.lat, offer.a.lng], [offer.b.lat, offer.b.lng]], { padding: [35, 35] });
+    };
+
+    window.cancelOffer = id => {
+      const offer = state.offers.find(o => o.id === id);
+      if (!offer || offer.creator !== playerName() || offer.status !== "open") return;
+      state.balances[offer.creator] += offer.stake;
+      offer.status = "cancelled";
+      save();
+      render();
+    };
+
+    window.acceptOffer = id => {
+      const offer = state.offers.find(o => o.id === id && o.status === "open");
+      if (!offer) return;
+      const runner = playerName();
+
+      if (runner === offer.creator) return alert("Нельзя принять собственное предложение.");
+      if (balance(runner) < offer.stake) return alert("Недостаточно демо-кредитов для ставки.");
+
+      if (!confirm(
+        `Принять спор на ${offer.stake} демо-кредитов? ` +
+        `Сначала нужно добраться до точки А за ${offer.arrivalMinutes} минут.`
+      )) return;
+
+      state.balances[runner] -= offer.stake;
+      offer.runner = runner;
+      offer.status = "active";
+      offer.phase = "toA";
+      offer.deadline = Date.now() + offer.arrivalMinutes * 60_000;
+      activeOfferId = offer.id;
+
+      save();
+      startGps();
+      render();
+    };
+
+    function distanceMeters(p1, p2) {
+      const rad = degrees => degrees * Math.PI / 180;
+      const earth = 6371000;
+      const dLat = rad(p2.lat - p1.lat);
+      const dLng = rad(p2.lng - p1.lng);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) * Math.sin(dLng / 2) ** 2;
+      return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function startGps() {
+if (!navigator.geolocation) {
+        $("activeStatus").textContent = "Браузер не поддерживает геолокацию.";
+        return;
+      }
+
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+
+      watchId = navigator.geolocation.watchPosition(
+        position => onLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        }),
+        error => {
+          $("activeStatus").textContent =
+            "Не удалось получить GPS: " + error.message +
+            ". Проверьте разрешение на геолокацию.";
+        },
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+      );
+    }
+
+    function onLocation(position) {
+      const offer = state.offers.find(o => o.id === activeOfferId && o.status === "active");
+      if (!offer) return;
+
+      if (offer.phase === "toA" && distanceMeters(position, offer.a) <= 50) {
+        offer.phase = "toB";
+        offer.deadline = Date.now() + offer.routeMinutes * 60_000;
+        save();
+        $("activeStatus").textContent = "Точка А достигнута! Таймер маршрута до Б запущен.";
+      } else if (offer.phase === "toB" && distanceMeters(position, offer.b) <= 50) {
+        settle(offer, true);
+      } else {
+        const target = offer.phase === "toA" ? offer.a : offer.b;
+        const distance = Math.round(distanceMeters(position, target));
+        $("activeStatus").textContent =
+          `${offer.phase === "toA" ? "Доберитесь до точки А" : "Двигайтесь к точке Б"}. ` +
+          `До цели примерно ${distance} м.`;
+      }
+    }
+
+    function settle(offer, success) {
+      if (offer.status !== "active") return;
+
+      if (success) {
+        // Автор теряет зарезервированную ставку; участник получает обе ставки.
+        state.balances[offer.runner] += offer.stake * 2;
+        offer.status = "won";
+      } else {
+        // Ставка участника переходит автору, его собственная ставка возвращается.
+        state.balances[offer.creator] += offer.stake * 2;
+        offer.status = "lost";
+      }
+
+      offer.result = success ? "Участник завершил маршрут." : "Время вышло.";
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      activeOfferId = null;
+      save();
+      render();
+      alert(offer.result);
+    }
+
+    function updateActiveText(offer) {
+      $("activeTitle").textContent = `Спор: ${offer.title}`;
+      $("activeStatus").textContent = offer.phase === "toA"
+        ? "Доберитесь до точки А до окончания времени."
+        : "Вы на точке А. Доберитесь до точки Б до окончания таймера.";
+
+      const seconds = Math.max(0, Math.ceil((offer.deadline - Date.now()) / 1000));
+      $("activeTimer").textContent =
+        `Осталось: ${Math.floor(seconds / 60)} мин. ${seconds % 60} сек.`;
+    }
+
+    $("stopGps").onclick = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      $("activeStatus").textContent = "GPS остановлен. Спор продолжает идти.";
+    };
+
+    setInterval(() => {
+      const offer = state.offers.find(o => o.id === activeOfferId && o.status === "active");
+      if (!offer) return;
+      if (Date.now() >= offer.deadline) settle(offer, false);
+      else updateActiveText(offer);
+    }, 1000);
+
+    updateWallet();
+    render();
+  </script>
+</body>
+</html>
